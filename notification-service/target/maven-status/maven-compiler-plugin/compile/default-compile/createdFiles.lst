@@ -1,0 +1,6 @@
+com\wallet\notification\service\NotificationService.class
+com\wallet\notification\controller\NotificationController.class
+com\wallet\notification\config\OpenApiConfig.class
+com\wallet\notification\repository\NotificationRepository.class
+com\wallet\notification\entity\NotificationHistory.class
+com\wallet\notification\NotificationServiceApplication.class

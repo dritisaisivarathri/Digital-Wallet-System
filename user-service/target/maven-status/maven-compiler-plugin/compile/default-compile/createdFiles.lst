@@ -1,0 +1,14 @@
+com\wallet\user\controller\InternalKycController.class
+com\wallet\user\UserServiceApplication.class
+com\wallet\user\repository\UserRepository.class
+com\wallet\user\controller\UserController.class
+com\wallet\user\entity\User.class
+com\wallet\user\config\JwtAuthenticationFilter.class
+com\wallet\user\config\OpenApiConfig.class
+com\wallet\user\config\SecurityConfig.class
+com\wallet\user\entity\KycDetails.class
+com\wallet\user\repository\KycRepository.class
+com\wallet\user\service\UserService.class
+com\wallet\user\util\JwtUtil.class
+com\wallet\user\dto\KycSubmitRequest.class
+com\wallet\user\dto\UserProfileDto.class

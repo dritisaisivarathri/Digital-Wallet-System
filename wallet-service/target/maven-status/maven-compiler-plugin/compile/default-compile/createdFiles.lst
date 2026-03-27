@@ -1,0 +1,10 @@
+com\wallet\core\controller\WalletController.class
+com\wallet\core\config\WalletConfig.class
+com\wallet\core\config\OpenApiConfig.class
+com\wallet\core\dto\TopUpRequest.class
+com\wallet\core\util\JwtUtil.class
+com\wallet\core\entity\WalletAccount.class
+com\wallet\core\dto\TransferRequest.class
+com\wallet\core\repository\WalletAccountRepository.class
+com\wallet\core\service\WalletService.class
+com\wallet\core\WalletServiceApplication.class

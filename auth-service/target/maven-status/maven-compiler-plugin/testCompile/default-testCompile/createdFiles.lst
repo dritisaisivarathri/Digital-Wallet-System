@@ -1,0 +1,4 @@
+com\wallet\auth\config\JwtAuthenticationFilterTest.class
+com\wallet\auth\controller\AuthControllerTest.class
+com\wallet\auth\util\JwtUtilTest.class
+com\wallet\auth\service\AuthServiceTest.class
