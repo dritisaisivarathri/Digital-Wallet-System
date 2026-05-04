@@ -9,7 +9,28 @@ tmp_authjar/
 .m2-temp/
 target/
 */target/
-.codex-*/
+.codex-*
 user-service/uploads/
 .settings/
 .DS_Store
+
+# IDEs
+.vscode/
+.sonarlint/
+.idea/
+*.class
+*.project
+*.classpath
+*/.classpath
+*/.project
+
+# Crash logs
+hs_err_pid*.log
+replay_pid*.log
+
+# Scratch files
+CheckBcrypt.*
+*DumpAuthService.java
+*DumpAuthService.class
+backend-java8-interview-notes.md
+full-split-layout-preview.svg
