@@ -1,7 +1,7 @@
 .metadata/
 .env
 .env.local
-frontend/
+
 *.log
 *_logs.txt
 tmp_authjar/
