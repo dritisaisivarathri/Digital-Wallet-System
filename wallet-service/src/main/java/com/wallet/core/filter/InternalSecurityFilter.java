@@ -29,8 +29,9 @@ public class InternalSecurityFilter implements Filter {
             return;
         }
 
+        String method = httpRequest.getMethod();
         String secretToken = httpRequest.getHeader(INTERNAL_SECRET_HEADER);
-        logger.info("Access attempt to {} | Internal Token Present: {}", path, (secretToken != null));
+        logger.info("Access attempt: {} {} | Internal Token Present: {}", method, path, (secretToken != null));
 
         if (INTERNAL_SECRET_VALUE.equals(secretToken)) {
             chain.doFilter(request, response);

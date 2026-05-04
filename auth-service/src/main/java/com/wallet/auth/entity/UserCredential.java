@@ -32,6 +32,12 @@ public class UserCredential {
     @Column(nullable = true)
     private String phoneNumber;
 
+    @Column(nullable = true, unique = true)
+    private String resetPasswordToken;
+
+    @Column(nullable = true)
+    private java.time.LocalDateTime resetPasswordTokenExpiry;
+
     @Column(nullable = false)
     private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();
 
@@ -64,6 +70,10 @@ public class UserCredential {
     public void setFullName(String fullName) { this.fullName = fullName; }
     public String getPhoneNumber() { return phoneNumber; }
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public String getResetPasswordToken() { return resetPasswordToken; }
+    public void setResetPasswordToken(String resetPasswordToken) { this.resetPasswordToken = resetPasswordToken; }
+    public java.time.LocalDateTime getResetPasswordTokenExpiry() { return resetPasswordTokenExpiry; }
+    public void setResetPasswordTokenExpiry(java.time.LocalDateTime resetPasswordTokenExpiry) { this.resetPasswordTokenExpiry = resetPasswordTokenExpiry; }
     public java.time.LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(java.time.LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

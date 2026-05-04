@@ -1,6 +1,7 @@
 package com.wallet.core.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wallet.core.dto.InternalCreditRequest;
 import com.wallet.core.dto.TopUpRequest;
 import com.wallet.core.dto.TransferRequest;
 import com.wallet.core.service.WalletService;
@@ -97,5 +98,25 @@ public class WalletControllerTest {
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string("Insufficient funds"));
+    }
+
+    @Test
+    void creditWalletInternally_Success() throws Exception {
+        UUID userId = UUID.randomUUID();
+        InternalCreditRequest request = new InternalCreditRequest();
+        request.setUserId(userId);
+        request.setAmount(new BigDecimal("100.00"));
+        request.setSource("REWARD_CASHBACK");
+        request.setNote("Cashback credited for reward redemption");
+
+        when(walletService.creditFromReward(eq(userId), eq(new BigDecimal("100.00")), eq("REWARD_CASHBACK"), eq("Cashback credited for reward redemption")))
+                .thenReturn(new BigDecimal("450.00"));
+
+        mockMvc.perform(post("/api/wallet/internal/credit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CREDITED"))
+                .andExpect(jsonPath("$.balance").value(450.00));
     }
 }

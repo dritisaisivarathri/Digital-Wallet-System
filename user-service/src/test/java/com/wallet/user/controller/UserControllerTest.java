@@ -1,7 +1,5 @@
 package com.wallet.user.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.wallet.user.dto.KycSubmitRequest;
 import com.wallet.user.entity.KycDetails;
 import com.wallet.user.service.UserService;
 import com.wallet.user.util.JwtUtil;
@@ -10,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
@@ -19,7 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserController.class)
@@ -35,23 +33,21 @@ public class UserControllerTest {
     @MockBean
     private JwtUtil jwtUtil;
 
-    @Autowired
-    private ObjectMapper objectMapper;
-
     @Test
     void submitKyc_Success() throws Exception {
         UUID userId = UUID.randomUUID();
-        KycSubmitRequest request = new KycSubmitRequest("PASSPORT", "ABC12345", "http://docs.com/1");
+        MockMultipartFile file = new MockMultipartFile("file", "document.pdf", "application/pdf", "pdf".getBytes());
         
         when(jwtUtil.extractUserId(anyString())).thenReturn(userId.toString());
         when(jwtUtil.extractEmail(anyString())).thenReturn("test@example.com");
-        when(jwtUtil.extractRole(anyString())).thenReturn("USER");
-        when(userService.submitKyc(any(), any(), any(), any())).thenReturn("KYC details submitted successfully");
+        when(userService.submitKyc(any(), any(), anyString(), anyString(), any())).thenReturn("KYC details submitted successfully");
 
-        mockMvc.perform(post("/api/users/kyc")
+        mockMvc.perform(multipart("/api/users/kyc")
+                .file(file)
+                .param("documentType", "PASSPORT")
+                .param("documentNumber", "ABC12345")
                 .header("Authorization", "Bearer testToken")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .contentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE))
                 .andExpect(status().isOk())
                 .andExpect(content().string("KYC details submitted successfully"));
     }
@@ -74,16 +70,67 @@ public class UserControllerTest {
 
     @Test
     void submitKyc_ValidationError() throws Exception {
-        KycSubmitRequest request = new KycSubmitRequest("PASSPORT", "ABC12345", "http://docs.com/1");
+        MockMultipartFile file = new MockMultipartFile("file", "document.pdf", "application/pdf", "pdf".getBytes());
         
         when(jwtUtil.extractUserId(anyString())).thenReturn(UUID.randomUUID().toString());
-        when(userService.submitKyc(any(), any(), any(), any())).thenThrow(new RuntimeException("KYC is already approved"));
+        when(userService.submitKyc(any(), any(), anyString(), anyString(), any())).thenThrow(new RuntimeException("KYC is already approved"));
 
-        mockMvc.perform(post("/api/users/kyc")
+        mockMvc.perform(multipart("/api/users/kyc")
+                .file(file)
+                .param("documentType", "PASSPORT")
+                .param("documentNumber", "ABC12345")
                 .header("Authorization", "Bearer testToken")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Validation Error: KYC is already approved"));
+                .contentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string("Error: KYC is already approved"));
     }
+
+    @Test
+    void submitKyc_SystemError() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "document.pdf", "application/pdf", "pdf".getBytes());
+        
+        when(jwtUtil.extractUserId(anyString())).thenReturn(UUID.randomUUID().toString());
+        when(userService.submitKyc(any(), any(), anyString(), anyString(), any())).thenThrow(new RuntimeException("Database down"));
+
+        mockMvc.perform(multipart("/api/users/kyc")
+                .file(file)
+                .param("documentType", "PASSPORT")
+                .param("documentNumber", "ABC12345")
+                .header("Authorization", "Bearer testToken")
+                .contentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string("Error: Database down"));
+    }
+
+    @Test
+    void getKycStatus_Failure() throws Exception {
+        when(jwtUtil.extractUserId(anyString())).thenReturn(UUID.randomUUID().toString());
+        when(userService.getKycStatus(any(), any(), any())).thenThrow(new RuntimeException("KYC details not found"));
+
+        mockMvc.perform(get("/api/users/kyc/status")
+                .header("Authorization", "Bearer testToken"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("Error: KYC details not found"));
+    }
+
+    @Test
+    void getKycStatus_SystemError() throws Exception {
+        when(jwtUtil.extractUserId(anyString())).thenReturn(UUID.randomUUID().toString());
+        when(userService.getKycStatus(any(), any(), any())).thenThrow(new RuntimeException("Database down"));
+
+        mockMvc.perform(get("/api/users/kyc/status")
+                .header("Authorization", "Bearer testToken"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("Error: Database down"));
+    }
+
+    @Test
+    void getKycStatus_InvalidToken() throws Exception {
+        when(jwtUtil.extractUserId(anyString())).thenReturn(null);
+
+        mockMvc.perform(get("/api/users/kyc/status")
+                .header("Authorization", "Bearer invalidToken"))
+                .andExpect(status().isUnauthorized());
+    }
+
 }

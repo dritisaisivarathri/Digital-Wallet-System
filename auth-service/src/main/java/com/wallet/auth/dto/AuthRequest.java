@@ -3,7 +3,7 @@ package com.wallet.auth.dto;
 import jakarta.validation.constraints.NotBlank;
 
 public class AuthRequest {
-    @NotBlank(message = "Username is required")
+    @NotBlank(message = "Email or username is required")
     private String username;
 
     @NotBlank(message = "Password is required")

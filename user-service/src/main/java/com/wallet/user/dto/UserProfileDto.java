@@ -9,16 +9,22 @@ public class UserProfileDto {
     private String phoneNumber;
     private String role;
     private String status;
+    private String profileImageUrl;
 
     public UserProfileDto() {}
 
     public UserProfileDto(UUID id, String email, String fullName, String phoneNumber, String role, String status) {
+        this(id, email, fullName, phoneNumber, role, status, null);
+    }
+
+    public UserProfileDto(UUID id, String email, String fullName, String phoneNumber, String role, String status, String profileImageUrl) {
         this.id = id;
         this.email = email;
         this.fullName = fullName;
         this.phoneNumber = phoneNumber;
         this.role = role;
         this.status = status;
+        this.profileImageUrl = profileImageUrl;
     }
 
     public UUID getId() { return id; }
@@ -33,4 +39,6 @@ public class UserProfileDto {
     public void setRole(String role) { this.role = role; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getProfileImageUrl() { return profileImageUrl; }
+    public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
 }

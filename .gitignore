@@ -1,1 +1,15 @@
 .metadata/
+.env
+.env.local
+frontend/
+*.log
+*_logs.txt
+tmp_authjar/
+.m2/
+.m2-temp/
+target/
+*/target/
+.codex-*/
+user-service/uploads/
+.settings/
+.DS_Store

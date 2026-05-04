@@ -1,14 +1,15 @@
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
+    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
-
   kafka:
     image: confluentinc/cp-kafka:7.4.0
+    restart: unless-stopped
     depends_on:
       - zookeeper
     ports:
@@ -16,31 +17,432 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
   redis:
     image: redis:7.2-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
-
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: root
       POSTGRES_DB: postgres
     ports:
       - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-
   zipkin:
     image: openzipkin/zipkin:3.5.1
+    restart: unless-stopped
     user: "0"
     ports:
       - "9411:9411"
-
+  eureka-server:
+    build:
+      context: ./eureka-server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      EUREKA_INSTANCE_HOSTNAME: eureka-server
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+  config-server:
+    build:
+      context: ./config-server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    ports:
+      - "8888:8888"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8888/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_wallet_auth
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRINGDOC_SERVER_URL: http://localhost:8090
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_FROM: ${SPRING_MAIL_FROM:-}
+      JAVA_TOOL_OPTIONS: "-Xmx384m -Xms384m"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_wallet_user
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRINGDOC_SERVER_URL: http://localhost:8090
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./user-service/uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+  wallet-service:
+    build:
+      context: ./wallet-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_wallet_wallet
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      TRANSACTION_SERVICE_INTERNAL_BASE_URL: http://transaction-service:8084
+      REWARDS_SERVICE_INTERNAL_BASE_URL: http://rewards-service:8085
+      NOTIFICATION_SERVICE_INTERNAL_BASE_URL: http://notification-service:8086
+      USER_SERVICE_INTERNAL_BASE_URL: http://user-service:8082
+      AUTH_SERVICE_INTERNAL_BASE_URL: http://auth-service:8081
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRINGDOC_SERVER_URL: http://localhost:8090
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+  transaction-service:
+    build:
+      context: ./transaction-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_wallet_tx
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRINGDOC_SERVER_URL: http://localhost:8090
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    ports:
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8084/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+  rewards-service:
+    build:
+      context: ./rewards-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_wallet_rewards
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRINGDOC_SERVER_URL: http://localhost:8090
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+      WALLET_SERVICE_INTERNAL_BASE_URL: http://wallet-service:8083
+      NOTIFICATION_SERVICE_INTERNAL_BASE_URL: http://notification-service:8086
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 256M
+    ports:
+      - "8085:8085"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_wallet_notification
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRINGDOC_SERVER_URL: http://localhost:8090
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    ports:
+      - "8086:8086"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8086/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+  admin-service:
+    build:
+      context: ./admin-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_wallet_admin
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRINGDOC_SERVER_URL: http://localhost:8090
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+      USER_SERVICE_INTERNAL_BASE_URL: http://user-service:8082
+      AUTH_SERVICE_INTERNAL_BASE_URL: http://auth-service:8081
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xms256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    ports:
+      - "8087:8087"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8087/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: "-Xmx384m -Xms384m"
+      JWT_SECRET: aW1wb3J0YW50X3NlY3JldF9mb3Jfand0X3NpZ25pbmdfZG9tYWluX3dhbGxldA==
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - eureka-server
+      - config-server
+      - api-gateway
+      - auth-service
+      - user-service
+      - wallet-service
+      - transaction-service
+      - rewards-service
+      - notification-service
+      - admin-service
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-storage:/var/lib/grafana
 volumes:
   pgdata:
+  grafana-storage:

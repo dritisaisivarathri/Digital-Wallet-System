@@ -16,7 +16,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -81,5 +83,37 @@ public class TransactionServiceTest {
 
         verify(transactionRepository, never()).saveAndFlush(any());
         verify(ledgerEntryRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void handleTransfer_Exception_Logged() {
+        Map<String, Object> event = new HashMap<>();
+        event.put("fromUserId", userId);
+
+        assertDoesNotThrow(() -> transactionService.handleTransfer(event));
+
+        verify(transactionRepository, never()).saveAndFlush(any());
+        verify(ledgerEntryRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void handleTopUp_RewardCashbackUsesRewardTransactionType() {
+        Map<String, Object> event = new HashMap<>();
+        event.put("userId", userId);
+        event.put("amount", new BigDecimal("100.00"));
+        event.put("transactionId", txId);
+        event.put("paymentMethod", "REWARD_CASHBACK");
+        event.put("subType", "REWARD_CASHBACK");
+        event.put("notes", "Cashback credited for reward redemption: Cashback Rs 100");
+
+        transactionService.handleTopUp(event);
+
+        verify(transactionRepository, times(1)).saveAndFlush(argThat((Transaction tx) ->
+                "REWARD_CASHBACK".equals(tx.getType())
+                        && "Cashback credited for reward redemption: Cashback Rs 100".equals(tx.getReferenceNotes())
+        ));
+        verify(ledgerEntryRepository, times(1)).saveAndFlush(argThat((LedgerEntry entry) ->
+                "Reward cashback".equals(entry.getDescription())
+        ));
     }
 }

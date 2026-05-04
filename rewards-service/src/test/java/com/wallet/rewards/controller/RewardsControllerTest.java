@@ -3,6 +3,7 @@ package com.wallet.rewards.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wallet.rewards.entity.RewardCatalog;
 import com.wallet.rewards.entity.RewardPoints;
+import com.wallet.rewards.dto.RewardRedeemResponse;
 import com.wallet.rewards.service.RewardsService;
 import com.wallet.rewards.util.JwtUtil;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -71,14 +73,41 @@ public class RewardsControllerTest {
     void redeem_Success() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID catalogId = UUID.randomUUID();
+        RewardRedeemResponse response = new RewardRedeemResponse();
+        response.setRewardName("Amazon Voucher");
+        response.setRewardType("VOUCHER");
+        response.setRemainingStock(9);
         
         when(jwtUtil.extractUserId(anyString())).thenReturn(userId.toString());
-        when(rewardsService.redeemItem(userId, catalogId)).thenReturn("Success");
+        when(rewardsService.redeemItem(userId, catalogId)).thenReturn(response);
 
         mockMvc.perform(post("/api/rewards/redeem/" + catalogId)
                 .header("Authorization", "Bearer testToken"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Success"));
+                .andExpect(jsonPath("$.rewardName").value("Amazon Voucher"))
+                .andExpect(jsonPath("$.rewardType").value("VOUCHER"))
+                .andExpect(jsonPath("$.remainingStock").value(9));
+    }
+
+    @Test
+    void redeem_CashbackSuccess() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID catalogId = UUID.randomUUID();
+        RewardRedeemResponse response = new RewardRedeemResponse();
+        response.setRewardName("Cashback Rs 100");
+        response.setRewardType("CASHBACK");
+        response.setWalletBalance(new BigDecimal("450.00"));
+        response.setCashbackCredited(new BigDecimal("100.00"));
+
+        when(jwtUtil.extractUserId(anyString())).thenReturn(userId.toString());
+        when(rewardsService.redeemItem(userId, catalogId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/rewards/redeem/" + catalogId)
+                .header("Authorization", "Bearer testToken"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rewardType").value("CASHBACK"))
+                .andExpect(jsonPath("$.walletBalance").value(450.00))
+                .andExpect(jsonPath("$.cashbackCredited").value(100.00));
     }
 
     @Test

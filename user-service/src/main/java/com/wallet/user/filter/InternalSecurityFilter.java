@@ -24,18 +24,19 @@ public class InternalSecurityFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         String path = httpRequest.getRequestURI();
 
-        if (path.contains("/v3/api-docs") || path.contains("/swagger-ui") || path.contains("/webjars") || path.contains("/actuator")) {
+        if (path.contains("/v3/api-docs") || path.contains("/swagger-ui") || path.contains("/webjars") || path.contains("/actuator") || path.contains("/api/users/uploads/")) {
             chain.doFilter(request, response);
             return;
         }
 
         String secretToken = httpRequest.getHeader(INTERNAL_SECRET_HEADER);
-        logger.info("Access attempt to {} | Internal Token Present: {}", path, (secretToken != null));
+        String method = httpRequest.getMethod();
+        logger.info("Access attempt: {} {} | Internal Token Present: {}", method, path, (secretToken != null));
 
-        if (INTERNAL_SECRET_VALUE.equals(secretToken)) {
+        if (secretToken != null && INTERNAL_SECRET_VALUE.equals(secretToken.trim())) {
             chain.doFilter(request, response);
         } else {
-            logger.warn("BLOCKED direct access to {} | Token: {}", path, secretToken);
+            logger.warn("BLOCKED direct access to {} | Token: [{}]", path, secretToken);
             httpResponse.sendError(HttpServletResponse.SC_FORBIDDEN, "Direct access is forbidden. Use API Gateway (port 8090).");
         }
     }

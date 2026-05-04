@@ -11,11 +11,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 @RestController
 @Hidden
 @RequestMapping("/api/users/internal")
 public class InternalKycController {
+    private static final Logger logger = LoggerFactory.getLogger(InternalKycController.class);
+
 
     @Autowired
     private UserService userService;
@@ -44,6 +49,24 @@ public class InternalKycController {
 
     @GetMapping("/kyc/pending")
     public ResponseEntity<List<KycDetails>> getPendingKycs() {
+        logger.info("Internal call received for pending KYC items");
         return ResponseEntity.ok(userService.getPendingKycs());
+    }
+
+    @GetMapping("/kyc/{userId}")
+    public ResponseEntity<KycDetails> getKycInternal(@PathVariable UUID userId) {
+        return ResponseEntity.ok(userService.getKycStatus(userId, null, null));
+    }
+
+    @GetMapping("/all")
+    public ResponseEntity<?> getAllUsers() {
+        return ResponseEntity.ok(userService.findAll());
+    }
+
+    @GetMapping("/{userId}")
+    public ResponseEntity<?> getUserInternal(@PathVariable UUID userId) {
+        return userService.findById(userId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }

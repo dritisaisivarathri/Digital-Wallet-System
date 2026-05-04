@@ -26,6 +26,7 @@ public class User {
 
     private String fullName;
     private String phoneNumber;
+    private String profileImageUrl;
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public User() {}
@@ -55,6 +56,8 @@ public class User {
     public void setFullName(String fullName) { this.fullName = fullName; }
     public String getPhoneNumber() { return phoneNumber; }
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public String getProfileImageUrl() { return profileImageUrl; }
+    public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

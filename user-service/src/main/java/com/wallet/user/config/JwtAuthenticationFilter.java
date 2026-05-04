@@ -37,15 +37,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 String role = jwtUtil.extractRole(token);
-                if (role != null) {
+                String userId = jwtUtil.extractUserId(token);
+                if (role != null && userId != null) {
                     List<SimpleGrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()));
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            jwtUtil.extractUserId(token), null, authorities);
+                            userId, null, authorities);
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.getWriter().write("Invalid token: role or userId missing");
+                    return;
                 }
             } catch (Exception e) {
-                // Token invalid or expired - intentionally silent to allow filter chain to continue (security config handles permit/deny)
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write("Invalid token: " + e.getMessage());
+                return;
             }
         }
         filterChain.doFilter(request, response);

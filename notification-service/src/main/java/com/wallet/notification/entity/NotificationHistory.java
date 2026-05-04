@@ -19,6 +19,9 @@ public class NotificationHistory {
     @Column(length = 1000)
     private String message;
 
+    @Column(length = 120)
+    private String referenceId;
+
     private LocalDateTime sentAt = LocalDateTime.now();
     
     // In real app: EMAIL, SMS, PUSH
@@ -43,6 +46,8 @@ public class NotificationHistory {
     public void setTopic(String topic) { this.topic = topic; }
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
+    public String getReferenceId() { return referenceId; }
+    public void setReferenceId(String referenceId) { this.referenceId = referenceId; }
     public LocalDateTime getSentAt() { return sentAt; }
     public void setSentAt(LocalDateTime sentAt) { this.sentAt = sentAt; }
     public String getType() { return type; }

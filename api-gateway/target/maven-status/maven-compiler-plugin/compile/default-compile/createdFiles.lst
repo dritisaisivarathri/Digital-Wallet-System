@@ -1,6 +1,0 @@
-com\wallet\gateway\config\OpenApiConfig.class
-com\wallet\gateway\ApiGatewayApplication.class
-com\wallet\gateway\filter\AuthenticationFilter.class
-com\wallet\gateway\util\JwtUtil.class
-com\wallet\gateway\config\SecurityConfig.class
-com\wallet\gateway\filter\AuthenticationFilter$Config.class

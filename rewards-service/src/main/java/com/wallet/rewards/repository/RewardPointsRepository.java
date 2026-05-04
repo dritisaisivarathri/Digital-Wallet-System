@@ -20,4 +20,17 @@ public interface RewardPointsRepository extends JpaRepository<RewardPoints, UUID
                    "VALUES (gen_random_uuid(), :userId, 0, 'SILVER', NOW()) " +
                    "ON CONFLICT (user_id) DO NOTHING", nativeQuery = true)
     void ensureUserExists(@Param("userId") UUID userId);
+
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "UPDATE reward_points " +
+                   "SET total_points = total_points - :points, " +
+                   "tier = CASE " +
+                   "  WHEN total_points - :points >= 5000 THEN 'PLATINUM' " +
+                   "  WHEN total_points - :points >= 1000 THEN 'GOLD' " +
+                   "  ELSE 'SILVER' " +
+                   "END, " +
+                   "last_updated = NOW() " +
+                   "WHERE user_id = :userId AND total_points >= :points", nativeQuery = true)
+    int deductPointsForUser(@Param("userId") UUID userId, @Param("points") int points);
 }

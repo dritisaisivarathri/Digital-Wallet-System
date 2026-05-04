@@ -102,7 +102,7 @@ public class AdminControllerTest {
         when(restTemplate.postForEntity(any(String.class), any(HttpEntity.class), eq(java.util.Map.class)))
                 .thenReturn(new ResponseEntity<>(Map.of("status", "APPROVED"), HttpStatus.OK));
         when(restTemplate.exchange(any(String.class), eq(org.springframework.http.HttpMethod.GET), any(HttpEntity.class), eq(java.util.Map.class)))
-                .thenReturn(new ResponseEntity<>(Map.of("email", "user-" + userId + "@example.com"), HttpStatus.OK));
+                .thenReturn(new ResponseEntity<>(Map.of("email", "invalid-email"), HttpStatus.OK));
 
         mockMvc.perform(post("/api/admin/kyc/" + userId + "/approve")
                 .header("Authorization", "Bearer testToken"))
@@ -122,5 +122,27 @@ public class AdminControllerTest {
                 .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0]").value("user1"));
+    }
+
+    @Test
+    void getCampaigns_Success() throws Exception {
+        Campaign campaign = new Campaign();
+        campaign.setName("Winter Promo");
+        when(campaignRepository.findAll()).thenReturn(List.of(campaign));
+
+        mockMvc.perform(get("/api/admin/campaigns"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Winter Promo"));
+    }
+
+    @Test
+    void getAllUsers_Success() throws Exception {
+        when(restTemplate.exchange(any(String.class), eq(org.springframework.http.HttpMethod.GET), any(HttpEntity.class), eq(List.class)))
+                .thenReturn(new ResponseEntity<>(List.of(Map.of("email", "user@test.com")), HttpStatus.OK));
+
+        mockMvc.perform(get("/api/admin/users")
+                .header("Authorization", "Bearer testToken"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].email").value("user@test.com"));
     }
 }

@@ -5,7 +5,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import com.wallet.admin.filter.InternalSecurityFilter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -26,10 +28,19 @@ import com.wallet.admin.entity.Campaign;
 import com.wallet.admin.repository.CampaignRepository;
 
 import io.swagger.v3.oas.annotations.Parameter;
+import org.springframework.core.ParameterizedTypeReference;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
+
 
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
@@ -43,6 +54,15 @@ public class AdminController {
     @Autowired
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Value("${services.user-service.internal-base-url:http://localhost:8082}")
+    private String userServiceBaseUrl;
+
+    @Value("${services.auth-service.internal-base-url:http://auth-service:8081}")
+    private String authServiceBaseUrl;
+
+    @Value("${services.notification-service.internal-base-url:http://localhost:8086}")
+    private String notificationServiceBaseUrl;
+
     @GetMapping("/dashboard")
     public ResponseEntity<?> getDashboardMetrics() {
         // Simplified metrics
@@ -53,7 +73,16 @@ public class AdminController {
 
     @PostMapping("/campaigns")
     public ResponseEntity<Campaign> createCampaign(@jakarta.validation.Valid @RequestBody Campaign campaign) {
-        return ResponseEntity.ok(campaignRepository.save(campaign));
+        Campaign savedCampaign = campaignRepository.save(campaign);
+        Map<String, Object> event = Map.of(
+                "campaignId", String.valueOf(savedCampaign.getId()),
+                "campaignName", String.valueOf(savedCampaign.getName()),
+                "targetTier", String.valueOf(savedCampaign.getTargetTier() == null ? "ALL" : savedCampaign.getTargetTier()),
+                "status", String.valueOf(savedCampaign.getStatus()),
+                "createdAt", String.valueOf(savedCampaign.getCreatedAt())
+        );
+        kafkaTemplate.send("campaign.created", event);
+        return ResponseEntity.ok(savedCampaign);
     }
 
     @GetMapping("/campaigns")
@@ -65,10 +94,9 @@ public class AdminController {
     public ResponseEntity<?> approveKyc(@PathVariable UUID userId,
             @Parameter(hidden = true) @RequestHeader("Authorization") String token) {
         try {
-            String userServiceUrl = "http://localhost:8090/api/users/internal/kyc/" + userId + "/approve";
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", token);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            logger.info("Admin approving KYC for user: {}", userId);
+            String userServiceUrl = userServiceBaseUrl + "/api/users/internal/kyc/" + userId + "/approve";
+            HttpEntity<Void> entity = new HttpEntity<>(buildInternalHeaders(token));
 
             String userEmail = null;
             ResponseEntity<java.util.Map> response = restTemplate.postForEntity(userServiceUrl, entity, java.util.Map.class);
@@ -84,17 +112,24 @@ public class AdminController {
                 return ResponseEntity.badRequest().body("Unable to resolve a valid email address for user " + userId);
             }
 
+            String adminEmail = extractEmailFromToken(token);
+
             KycNotificationEvent event = new KycNotificationEvent(
                 userId, 
                 userEmail,
+                adminEmail,
                 "APPROVED", 
                 "Identity verification successful", 
                 "KYC_UPDATE"
             );
+            logger.info("PUBLISHING KYC EVENT - UserID: {}, Status: APPROVED, Email: {}", userId, userEmail);
             kafkaTemplate.send("kyc.status.updated", event);
+            syncKycNotification(event, token);
+            logger.info("KYC EVENT PUBLISHED SUCCESSFULLY for user {}", userId);
 
             return ResponseEntity.ok("KYC Approved for user " + userId);
         } catch (Exception e) {
+            logger.error("FAILED TO PUBLISH KYC EVENT for user {}: {}", userId, e.getMessage());
             return ResponseEntity.badRequest().body("Failed to contact User Service: " + e.getMessage());
         }
     }
@@ -105,13 +140,11 @@ public class AdminController {
             @Parameter(hidden = true) @RequestHeader("Authorization") String token) {
         try {
             java.net.URI uri = org.springframework.web.util.UriComponentsBuilder
-                    .fromHttpUrl("http://localhost:8090/api/users/internal/kyc/" + userId + "/reject")
+                    .fromHttpUrl(userServiceBaseUrl + "/api/users/internal/kyc/" + userId + "/reject")
                     .queryParam("reason", reason)
                     .build().toUri();
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", token);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            HttpEntity<Void> entity = new HttpEntity<>(buildInternalHeaders(token));
 
             String userEmail = null;
             ResponseEntity<java.util.Map> response = restTemplate.postForEntity(uri, entity, java.util.Map.class);
@@ -127,17 +160,24 @@ public class AdminController {
                 return ResponseEntity.badRequest().body("Unable to resolve a valid email address for user " + userId);
             }
 
+            String adminEmail = extractEmailFromToken(token);
+
             KycNotificationEvent event = new KycNotificationEvent(
                 userId, 
                 userEmail,
+                adminEmail,
                 "REJECTED", 
                 reason != null ? reason : "Identity verification failed", 
                 "KYC_UPDATE"
             );
+            logger.info("PUBLISHING KYC EVENT - UserID: {}, Status: REJECTED, Email: {}", userId, userEmail);
             kafkaTemplate.send("kyc.status.updated", event);
+            syncKycNotification(event, token);
+            logger.info("KYC EVENT PUBLISHED SUCCESSFULLY for user {}", userId);
 
             return ResponseEntity.ok("KYC Rejected for user " + userId);
         } catch (Exception e) {
+            logger.error("FAILED TO PUBLISH KYC EVENT for user {}: {}", userId, e.getMessage());
             return ResponseEntity.badRequest().body("Failed to contact User Service: " + e.getMessage());
         }
     }
@@ -145,25 +185,53 @@ public class AdminController {
     @GetMapping("/kyc/pending")
     public ResponseEntity<?> getPendingKycs(@Parameter(hidden = true) @RequestHeader("Authorization") String token) {
         try {
-            String userServiceUrl = "http://localhost:8090/api/users/internal/kyc/pending";
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", token);
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            logger.info("Admin fetching pending KYC queue. Base URL: {}", userServiceBaseUrl);
+            String userServiceUrl = userServiceBaseUrl + "/api/users/internal/kyc/pending";
+            logger.info("Calling Internal URL: {}", userServiceUrl);
+            
+            HttpEntity<Void> entity = new HttpEntity<>(buildInternalHeaders(token));
+
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    userServiceUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            
+            List<Map<String, Object>> body = response.getBody();
+            int count = body != null ? body.size() : 0;
+            logger.info("Successfully fetched {} pending KYC items from User Service (Status: {})", 
+                count, response.getStatusCode());
+            
+            if (count == 0) {
+                logger.warn("User Service returned 0 pending KYC items. Check User Service logs and database state.");
+            }
+            
+            return ResponseEntity.ok(body);
+        } catch (Exception e) {
+            logger.error("CRITICAL: Failed to fetch KYC queue from {}: {}", userServiceBaseUrl, e.getMessage(), e);
+            return ResponseEntity.status(500).body("Failed to contact User Service: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/users")
+    public ResponseEntity<?> getAllUsers(@Parameter(hidden = true) @RequestHeader("Authorization") String token) {
+        try {
+            String userServiceUrl = authServiceBaseUrl + "/api/auth/internal/users";
+            HttpEntity<Void> entity = new HttpEntity<>(buildInternalHeaders(token));
 
             ResponseEntity<List> response = restTemplate.exchange(userServiceUrl,
                     org.springframework.http.HttpMethod.GET, entity, List.class);
             return ResponseEntity.ok(response.getBody());
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Failed to contact User Service: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Failed to fetch users from User Service: " + e.getMessage());
         }
     }
 
     private String getUserEmail(UUID userId, String token) {
         try {
-            String url = "http://localhost:8090/api/users/internal/" + userId;
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", token);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            String url = userServiceBaseUrl + "/api/users/internal/" + userId;
+            HttpEntity<Void> entity = new HttpEntity<>(buildInternalHeaders(token));
             
             ResponseEntity<java.util.Map> userRes = restTemplate.exchange(url, HttpMethod.GET, entity, java.util.Map.class);
             if (userRes.getStatusCode().is2xxSuccessful() && userRes.getBody() != null) {
@@ -177,5 +245,43 @@ public class AdminController {
 
     private boolean isValidEmail(String email) {
         return email != null && EMAIL_PATTERN.matcher(email.trim()).matches();
+    }
+
+    private void syncKycNotification(KycNotificationEvent event, String token) {
+        try {
+            String url = notificationServiceBaseUrl + "/api/notifications/internal/sync/kyc-status";
+            HttpEntity<KycNotificationEvent> entity = new HttpEntity<>(event, buildInternalHeaders(token));
+            restTemplate.postForEntity(url, entity, java.util.Map.class);
+            logger.info("KYC notification synced directly for user {}", event.getUserId());
+        } catch (Exception e) {
+            logger.error("Direct KYC notification sync failed for user {}: {}", event.getUserId(), e.getMessage());
+        }
+    }
+
+    private String extractEmailFromToken(String token) {
+        try {
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
+            }
+            String[] parts = token.split("\\.");
+            if (parts.length > 1) {
+                String payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                java.util.Map<String, Object> map = mapper.readValue(payload, java.util.Map.class);
+                return (String) map.get("sub");
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to extract admin email: " + e.getMessage());
+        }
+        return "admin@digitalwallet.com"; // Fallback
+    }
+
+    private HttpHeaders buildInternalHeaders(String authorizationToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(InternalSecurityFilter.INTERNAL_SECRET_HEADER, InternalSecurityFilter.INTERNAL_SECRET_VALUE);
+        if (authorizationToken != null && !authorizationToken.isBlank()) {
+            headers.set(HttpHeaders.AUTHORIZATION, authorizationToken);
+        }
+        return headers;
     }
 }

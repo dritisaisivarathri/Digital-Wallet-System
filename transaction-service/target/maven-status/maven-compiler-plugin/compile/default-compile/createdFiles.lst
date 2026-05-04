@@ -1,8 +1,0 @@
-com\wallet\tx\config\OpenApiConfig.class
-com\wallet\tx\controller\TransactionController.class
-com\wallet\tx\entity\Transaction.class
-com\wallet\tx\service\TransactionService.class
-com\wallet\tx\repository\LedgerEntryRepository.class
-com\wallet\tx\entity\LedgerEntry.class
-com\wallet\tx\TransactionServiceApplication.class
-com\wallet\tx\repository\TransactionRepository.class

@@ -3,6 +3,7 @@ package com.wallet.tx.controller;
 import com.wallet.tx.entity.Transaction;
 import com.wallet.tx.repository.LedgerEntryRepository;
 import com.wallet.tx.repository.TransactionRepository;
+import com.wallet.tx.service.TransactionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -36,6 +37,9 @@ public class TransactionControllerTest {
 
     @MockBean
     private LedgerEntryRepository ledgerEntryRepository;
+
+    @MockBean
+    private TransactionService transactionService;
 
     @Test
     void getHistory_Success() throws Exception {

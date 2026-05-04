@@ -1,9 +1,0 @@
-com\wallet\rewards\RewardsServiceApplication.class
-com\wallet\rewards\entity\RewardPoints.class
-com\wallet\rewards\config\OpenApiConfig.class
-com\wallet\rewards\controller\RewardsController.class
-com\wallet\rewards\repository\RewardPointsRepository.class
-com\wallet\rewards\repository\RewardCatalogRepository.class
-com\wallet\rewards\service\RewardsService.class
-com\wallet\rewards\util\JwtUtil.class
-com\wallet\rewards\entity\RewardCatalog.class

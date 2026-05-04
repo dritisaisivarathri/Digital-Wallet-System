@@ -17,23 +17,35 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.List;
-import java.util.ArrayList;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private static final Set<String> PUBLIC_AUTH_PATHS = Set.of(
+            "/api/auth/signup",
+            "/api/auth/login",
+            "/api/auth/validate",
+            "/api/auth/refresh-token",
+            "/api/auth/forgot-password",
+            "/api/auth/reset-password",
+            "/api/auth/send-otp",
+            "/api/auth/verify-otp"
+    );
 
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private com.wallet.auth.service.TokenBlacklistService blacklistService;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        
+        boolean publicAuthPath = isPublicAuthPath(request.getRequestURI());
         String authHeader = request.getHeader("Authorization");
         String token = null;
         
@@ -43,6 +55,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
+                if (blacklistService.isBlacklisted(token)) {
+                    logger.warn("Blacklisted token encountered: {}", token);
+                    throw new RuntimeException("Token is blacklisted");
+                }
+                
                 logger.debug("Validating token for request: {}", request.getRequestURI());
                 jwtUtil.validateToken(token);
                 String userId = jwtUtil.extractUserId(token);
@@ -65,6 +82,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     logger.warn("UserId missing in token");
                 }
             } catch (Exception e) {
+                if (publicAuthPath) {
+                    logger.info("Ignoring Authorization header on public auth path {} because token validation failed: {}",
+                            request.getRequestURI(), e.getMessage());
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 logger.error("JWT Validation failed in auth-service: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -76,5 +99,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             logger.warn("Authorization header present but Bearer prefix missing");
         }
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isPublicAuthPath(String path) {
+        return PUBLIC_AUTH_PATHS.stream().anyMatch(path::equals);
     }
 }

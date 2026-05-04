@@ -3,21 +3,9 @@ package com.wallet.auth.controller;
 import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.wallet.auth.dto.AuthRequest;
-import com.wallet.auth.dto.AuthResponse;
-import com.wallet.auth.dto.RegisterRequest;
-import com.wallet.auth.dto.UpdateProfileRequest;
+import org.springframework.web.bind.annotation.*;
+import com.wallet.auth.dto.*;
 import com.wallet.auth.service.AuthService;
-
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +22,9 @@ public class AuthController {
     @Autowired
     private AuthService service;
 
+    @Autowired
+    private com.wallet.auth.service.OtpService otpService;
+
     @PostMapping("/signup")
     public ResponseEntity<String> addNewUser(@jakarta.validation.Valid @RequestBody RegisterRequest request) {
         try {
@@ -45,18 +36,33 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> getToken(@jakarta.validation.Valid @RequestBody AuthRequest request) {
-        try{
+        try {
             AuthResponse response = service.login(request);
             return ResponseEntity.ok(response);
-        } catch(Exception e){
+        } catch (Exception e) {
             return ResponseEntity.status(401).body("Invalid Authentication");
         }
     }
 
     @GetMapping("/validate")
     public String validateToken(@RequestParam("token") String token) {
-        // Validation happens in API gateway, but this can be a fallback endpoint
         return "Token is valid";
+    }
+
+    @Hidden
+    @GetMapping("/internal/users")
+    public ResponseEntity<?> getAllUsersInternal() {
+        return ResponseEntity.ok(service.findAllUsers());
+    }
+
+    @Hidden
+    @GetMapping("/internal/users/{userId}")
+    public ResponseEntity<?> getUserInternal(@PathVariable java.util.UUID userId) {
+        try {
+            return ResponseEntity.ok(service.getProfile(userId));
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body(e.getMessage());
+        }
     }
 
     @Hidden
@@ -66,14 +72,23 @@ public class AuthController {
         return ResponseEntity.ok("User status updated to " + status);
     }
 
+    @Hidden
+    @DeleteMapping("/internal/users/{userId}")
+    public ResponseEntity<String> deleteUserInternal(@PathVariable java.util.UUID userId) {
+        try {
+            service.deleteUser(userId);
+            return ResponseEntity.ok("User credentials deleted successfully");
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body(e.getMessage());
+        }
+    }
+
     @GetMapping("/users/{userId}/profile")
     public ResponseEntity<?> getProfile(@PathVariable java.util.UUID userId, Authentication authentication) {
         java.util.UUID effectiveUserId = resolveEffectiveUserId(userId, authentication);
-        logger.info("Accessing profile for requested userId: {} | effective userId: {}", userId, effectiveUserId);
         try {
             return ResponseEntity.ok(service.getProfile(effectiveUserId));
         } catch (Exception e) {
-            logger.error("Error fetching profile for userId {}: {}", effectiveUserId, e.getMessage());
             return ResponseEntity.status(404).body(e.getMessage());
         }
     }
@@ -82,12 +97,87 @@ public class AuthController {
     public ResponseEntity<?> updateProfile(@jakarta.validation.Valid @RequestBody UpdateProfileRequest request,
             Authentication authentication) {
         java.util.UUID effectiveUserId = resolveAuthenticatedUserId(authentication);
-        logger.info("Updating profile for authenticated userId: {}", effectiveUserId);
         try {
             return ResponseEntity.ok(service.updateProfile(effectiveUserId, request));
         } catch (Exception e) {
-            logger.error("Error updating profile for userId {}: {}", effectiveUserId, e.getMessage());
             return ResponseEntity.status(404).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout(jakarta.servlet.http.HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            service.logout(authHeader);
+            logger.info("User logged out successfully");
+        }
+        return ResponseEntity.ok("Successfully logged out");
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(@jakarta.validation.Valid @RequestBody ChangePasswordRequest request,
+                                            Authentication authentication) {
+        java.util.UUID userId = resolveAuthenticatedUserId(authentication);
+        try {
+            service.changePassword(userId, request);
+            return ResponseEntity.ok("Password changed successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/send-otp")
+    public ResponseEntity<String> sendOtp(@jakarta.validation.Valid @RequestBody OtpRequest request) {
+        otpService.generateAndSendOtp(request.getEmail());
+        return ResponseEntity.ok("OTP sent to your email.");
+    }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<String> verifyOtp(@jakarta.validation.Valid @RequestBody VerifyOtpRequest request) {
+        boolean isValid = otpService.verifyOtp(request.getEmail(), request.getCode());
+        if (isValid) {
+            return ResponseEntity.ok("OTP verified successfully");
+        } else {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Invalid or expired OTP");
+        }
+    }
+
+    @PostMapping("/refresh-token")
+    public ResponseEntity<?> refreshToken(@jakarta.validation.Valid @RequestBody RefreshTokenRequest request) {
+        try {
+            return ResponseEntity.ok(service.refreshToken(request.getRefreshToken()));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@jakarta.validation.Valid @RequestBody ForgotPasswordRequest request) {
+        try {
+            service.forgotPassword(request.getEmail());
+            return ResponseEntity.ok("If an account exists with that email, an OTP has been sent.");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@jakarta.validation.Valid @RequestBody ResetPasswordRequest request) {
+        try {
+            service.resetPassword(request.getToken(), request.getNewPassword());
+            return ResponseEntity.ok("Password has been reset successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/reset-password/otp")
+    public ResponseEntity<String> resetPasswordWithOtp(@jakarta.validation.Valid @RequestBody ResetPasswordWithOtpRequest request) {
+        try {
+            service.resetPasswordWithOtp(request.getEmail(), request.getCode(), request.getNewPassword());
+            return ResponseEntity.ok("Password has been reset successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
@@ -98,7 +188,6 @@ public class AuthController {
         if (authentication == null || authentication.getPrincipal() == null) {
             throw new RuntimeException("Authenticated user not found");
         }
-
         Object principal = authentication.getPrincipal();
         String principalValue = principal instanceof UserDetails userDetails
                 ? userDetails.getUsername()
@@ -106,7 +195,6 @@ public class AuthController {
         try {
             return java.util.UUID.fromString(principalValue);
         } catch (IllegalArgumentException e) {
-            logger.warn("Invalid authenticated principal for profile update: {}", principalValue);
             throw new RuntimeException("Invalid authenticated user");
         }
     }
@@ -118,14 +206,12 @@ public class AuthController {
         if (authentication == null || authentication.getPrincipal() == null) {
             return requestedUserId;
         }
-
         boolean isAdmin = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch("ROLE_ADMIN"::equals);
         if (isAdmin) {
             return requestedUserId;
         }
-
         Object principal = authentication.getPrincipal();
         String principalValue = principal instanceof UserDetails userDetails
                 ? userDetails.getUsername()
@@ -133,7 +219,6 @@ public class AuthController {
         try {
             return java.util.UUID.fromString(principalValue);
         } catch (IllegalArgumentException e) {
-            logger.warn("Invalid authenticated principal for profile access: {}", principalValue);
             return requestedUserId;
         }
     }

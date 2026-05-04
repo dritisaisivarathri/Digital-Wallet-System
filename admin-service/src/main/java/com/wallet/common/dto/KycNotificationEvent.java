@@ -5,15 +5,17 @@ import java.util.UUID;
 public class KycNotificationEvent {
     private UUID userId;
     private String userEmail;
+    private String adminEmail;
     private String status;
     private String reason;
     private String type;
 
     public KycNotificationEvent() {}
 
-    public KycNotificationEvent(UUID userId, String userEmail, String status, String reason, String type) {
+    public KycNotificationEvent(UUID userId, String userEmail, String adminEmail, String status, String reason, String type) {
         this.userId = userId;
         this.userEmail = userEmail;
+        this.adminEmail = adminEmail;
         this.status = status;
         this.reason = reason;
         this.type = type;
@@ -23,6 +25,8 @@ public class KycNotificationEvent {
     public void setUserId(UUID userId) { this.userId = userId; }
     public String getUserEmail() { return userEmail; }
     public void setUserEmail(String userEmail) { this.userEmail = userEmail; }
+    public String getAdminEmail() { return adminEmail; }
+    public void setAdminEmail(String adminEmail) { this.adminEmail = adminEmail; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getReason() { return reason; }

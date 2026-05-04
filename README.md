@@ -75,3 +75,16 @@ All endpoints are strictly documented via OpenAPI/Swagger. Once a service is run
 set ZIPKIN_ENDPOINT=http://localhost:9411/api/v2/spans
 ```
 - Start Zipkin with `docker-compose up -d zipkin` and open `http://localhost:9411` to inspect traces across gateway and services.
+
+## SonarQube and SonarLint
+- SonarQube Maven analysis is configured at the parent project level.
+- JaCoCo coverage reports are generated during test runs and are wired into Sonar analysis.
+- VS Code workspace recommendations include the SonarLint extension.
+- Setup steps are documented in [docs/sonarqube-setup.md](/D:/Digital-Wallet-System/docs/sonarqube-setup.md).
+
+Run analysis from the repository root:
+```powershell
+$env:SONAR_HOST_URL="http://localhost:9000"
+$env:SONAR_TOKEN="your_generated_token"
+mvn clean verify sonar:sonar
+```

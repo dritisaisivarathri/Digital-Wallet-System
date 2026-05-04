@@ -6,11 +6,11 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public class TransferRequest {
-    @NotNull(message = "Target User ID is required")
+    @NotNull(message = "Enter correct user ID. Recipient user ID is required.")
     private UUID targetUserId;
 
-    @NotNull(message = "Amount is required")
-    @Positive(message = "Amount must be positive")
+    @NotNull(message = "Enter correct amount. Amount is required.")
+    @Positive(message = "Enter correct amount. Amount must be greater than 0.")
     private BigDecimal amount;
     private String notes;
 

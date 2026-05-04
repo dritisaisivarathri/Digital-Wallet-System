@@ -8,4 +8,5 @@ import java.util.UUID;
 public interface UserCredentialRepository extends JpaRepository<UserCredential, UUID> {
     Optional<UserCredential> findByEmailIgnoreCase(String email);
     Optional<UserCredential> findByUsernameIgnoreCase(String username);
+    Optional<UserCredential> findByResetPasswordToken(String resetPasswordToken);
 }

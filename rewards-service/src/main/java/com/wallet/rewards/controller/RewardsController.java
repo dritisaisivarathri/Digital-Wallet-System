@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -46,5 +47,15 @@ public class RewardsController {
     @PostMapping("/catalog")
     public ResponseEntity<RewardCatalog> createCatalogItem(@jakarta.validation.Valid @RequestBody RewardCatalog item) {
         return ResponseEntity.ok(rewardsService.createCatalogItem(item));
+    }
+
+    @PostMapping("/internal/sync/topup")
+    public ResponseEntity<Map<String, Object>> syncTopUp(@RequestBody Map<String, Object> event) {
+        return ResponseEntity.ok(Map.of("applied", rewardsService.syncTopUp(event)));
+    }
+
+    @PostMapping("/internal/sync/transfer")
+    public ResponseEntity<Map<String, Object>> syncTransfer(@RequestBody Map<String, Object> event) {
+        return ResponseEntity.ok(Map.of("applied", rewardsService.syncTransfer(event)));
     }
 }

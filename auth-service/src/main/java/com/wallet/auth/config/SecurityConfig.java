@@ -33,7 +33,21 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/validate", "/api/auth/internal/**", "/v3/api-docs/**", "/swagger-ui/**", "/actuator/**").permitAll()
+                .requestMatchers(
+                        "/api/auth/signup",
+                        "/api/auth/login",
+                        "/api/auth/validate",
+                        "/api/auth/refresh-token",
+                        "/api/auth/forgot-password",
+                        "/api/auth/reset-password",
+                        "/api/auth/reset-password/otp",
+                        "/api/auth/send-otp",
+                        "/api/auth/verify-otp",
+                        "/api/auth/internal/**",
+                        "/v3/api-docs/**",
+                        "/swagger-ui/**",
+                        "/actuator/**"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint()))
