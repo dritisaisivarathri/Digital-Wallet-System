@@ -30,7 +30,8 @@ class EmailServiceTest {
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(captor.capture());
         assertEquals("user@test.com", captor.getValue().getTo()[0]);
-        assertEquals("admin@test.com", captor.getValue().getFrom());
+        assertEquals("no-reply@digitalwallet.com", captor.getValue().getFrom());
+        assertEquals("admin@test.com", captor.getValue().getReplyTo());
         assertEquals("Subject", captor.getValue().getSubject());
         assertEquals("Body", captor.getValue().getText());
     }

@@ -109,8 +109,12 @@ public class UserControllerTest {
 
         mockMvc.perform(get("/api/users/kyc/status")
                 .header("Authorization", "Bearer testToken"))
-                .andExpect(status().isNotFound())
-                .andExpect(content().string("Error: KYC details not found"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("NOT_SUBMITTED"))
+                .andExpect(jsonPath("$.rejectionReason").value(""))
+                .andExpect(jsonPath("$.documentType").value(""))
+                .andExpect(jsonPath("$.documentNumber").value(""))
+                .andExpect(jsonPath("$.documentUrl").value(""));
     }
 
     @Test

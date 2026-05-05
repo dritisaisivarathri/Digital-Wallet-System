@@ -113,15 +113,21 @@ public class AdminControllerTest {
     @Test
     void getPendingKycs_Success() throws Exception {
         String token = "Bearer testToken";
-        List<String> mockList = List.of("user1", "user2");
+        List<Map<String, Object>> mockList = List.of(
+                Map.of("email", "user1@test.com"),
+                Map.of("email", "user2@test.com"));
         
-        when(restTemplate.exchange(any(String.class), eq(org.springframework.http.HttpMethod.GET), any(HttpEntity.class), eq(List.class)))
+        when(restTemplate.exchange(
+                any(String.class),
+                eq(org.springframework.http.HttpMethod.GET),
+                any(HttpEntity.class),
+                any(org.springframework.core.ParameterizedTypeReference.class)))
                 .thenReturn(new ResponseEntity<>(mockList, HttpStatus.OK));
 
         mockMvc.perform(get("/api/admin/kyc/pending")
                 .header("Authorization", token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").value("user1"));
+                .andExpect(jsonPath("$[0].email").value("user1@test.com"));
     }
 
     @Test

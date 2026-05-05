@@ -88,3 +88,24 @@ $env:SONAR_HOST_URL="http://localhost:9000"
 $env:SONAR_TOKEN="your_generated_token"
 mvn clean verify sonar:sonar
 ```
+
+## CI/CD Pipeline
+GitHub Actions is configured in `.github/workflows/ci-cd.yml`.
+
+The pipeline runs on pull requests and pushes to `main` or `develop`:
+- Backend: Java 17 Maven `clean verify`, JaCoCo report generation, and packaged service JAR artifact upload.
+- Frontend: Node.js 20 `npm ci` and Vite production build.
+- Docker: Docker Compose configuration validation and image build for all services.
+- Sonar: optional Maven Sonar analysis when `SONAR_TOKEN` and `SONAR_HOST_URL` repository secrets are configured.
+
+Deployment runs only for pushes to `main` and only when all deployment secrets are present:
+- `SERVER_HOST`
+- `SERVER_USER`
+- `SERVER_SSH_KEY`
+- `SERVER_PROJECT_PATH`
+
+On the target server, clone this repository into `SERVER_PROJECT_PATH`, install Docker and Docker Compose, and make sure the SSH user can run Docker. The deploy job updates the server checkout with `git pull --ff-only origin main`, then runs:
+
+```bash
+docker compose up -d --build --remove-orphans
+```

@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -48,7 +48,7 @@ public class NotificationServiceTest {
 
         notificationService.handleTopUp(event);
 
-        verify(notificationRepository, times(1)).save(any(NotificationHistory.class));
+        verify(notificationRepository, times(1)).saveAndFlush(any(NotificationHistory.class));
     }
 
     @Test
@@ -63,7 +63,7 @@ public class NotificationServiceTest {
         notificationService.handleTransfer(event);
 
         // Should save two notifications (one for sender, one for receiver)
-        verify(notificationRepository, times(2)).save(any(NotificationHistory.class));
+        verify(notificationRepository, times(2)).saveAndFlush(any(NotificationHistory.class));
     }
 
     @Test
@@ -74,7 +74,7 @@ public class NotificationServiceTest {
 
         notificationService.handleTopUp(event);
 
-        verify(notificationRepository, never()).save(any());
+        verify(notificationRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -84,8 +84,8 @@ public class NotificationServiceTest {
         notificationService.handleKycStatusUpdate(event);
 
         verify(emailService).sendEmail(eq("user@test.com"), eq("admin@test.com"), eq("KYC Status Update: APPROVED"),
-                contains("You can now perform full transactions."));
-        verify(notificationRepository).save(any(NotificationHistory.class));
+                contains("Your KYC approved"));
+        verify(notificationRepository, times(2)).saveAndFlush(any(NotificationHistory.class));
     }
 
     @Test
@@ -96,7 +96,7 @@ public class NotificationServiceTest {
 
         verify(emailService).sendEmail(eq("user@test.com"), eq("admin@test.com"), eq("KYC Status Update: REJECTED"),
                 contains("Reason: Missing docs"));
-        verify(notificationRepository).save(any(NotificationHistory.class));
+        verify(notificationRepository, times(2)).saveAndFlush(any(NotificationHistory.class));
     }
 
     @Test
@@ -104,9 +104,8 @@ public class NotificationServiceTest {
         KycNotificationEvent event = new KycNotificationEvent(userId, "user@test.com", "admin@test.com", "APPROVED", null, "KYC_UPDATE");
         doThrow(new RuntimeException("mail down")).when(emailService).sendEmail(any(), any(), any(), any());
 
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> notificationService.handleKycStatusUpdate(event));
-
-        assertEquals("mail down", ex.getMessage());
+        assertDoesNotThrow(() -> notificationService.handleKycStatusUpdate(event));
+        verify(notificationRepository, times(2)).saveAndFlush(any(NotificationHistory.class));
     }
 
     @Test
